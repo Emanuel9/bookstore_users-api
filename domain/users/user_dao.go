@@ -1,6 +1,7 @@
 package users
 
 import (
+	"fmt"
 	"github.com/Emanuel9/bookstore_users-api/datasources/mysql/users_db"
 	"github.com/Emanuel9/bookstore_users-api/utils/date_utils"
 	"github.com/Emanuel9/bookstore_users-api/utils/errors"
@@ -8,10 +9,11 @@ import (
 )
 
 const(
-	queryInsertUser = "INSERT INTO users(first_name, last_name, email, data_created) VALUES(?, ?, ?, ?); "
-	queryGetUser = "SELECT id, first_name, last_name, email, data_created FROM users where id =?;"
+	queryInsertUser = "INSERT INTO users(first_name, last_name, email, data_created, status, password) VALUES(?, ?, ?, ?, ?, ?); "
+	queryGetUser = "SELECT id, first_name, last_name, email, data_created, status FROM users where id =?;"
 	queryUpdateUser = "UPDATE users SET first_name=?, last_name=?, email=? WHERE id=?;"
 	queryDeleteUser = "DELETE FROM users where id=?;"
+	queryFindUserByStatus = "SELECT id, first_name, last_name, email, data_created, status FROM users WHERE status=?;"
 )
 
 var (
@@ -25,7 +27,7 @@ func (user *User) Get() *errors.RestError {
 	}
 	defer stmt.Close()
 	result := stmt.QueryRow(user.Id)
-	if err := result.Scan(&user.Id, &user.FirstName, &user.LastName, &user.Email, &user.DateCreated); err != nil {
+	if err := result.Scan(&user.Id, &user.FirstName, &user.LastName, &user.Email, &user.DateCreated, &user.Status); err != nil {
 		return mysql_utils.ParseError(err)
 	}
 
@@ -52,7 +54,7 @@ func (user *User) Save() *errors.RestError {
 	defer stmt.Close()
 	user.DateCreated = date_utils.GetNowString()
 
-	insertResult, err := stmt.Exec(user.FirstName, user.LastName, user.Email, user.DateCreated)
+	insertResult, err := stmt.Exec(user.FirstName, user.LastName, user.Email, user.DateCreated, user.Status, user.Password)
 	if err != nil {
 		return mysql_utils.ParseError(err)
 	}
@@ -103,4 +105,34 @@ func (user *User) Delete() *errors.RestError {
 
 	return nil
 
+}
+
+func (user *User) FindByStatus(status string) ([]User, *errors.RestError) {
+	stmt, err := users_db.Client.Prepare(queryFindUserByStatus)
+	if err != nil {
+		return nil, errors.NewInternalServerError(err.Error())
+	}
+	defer stmt.Close()
+
+	rows, err := stmt.Query(status)
+	if err != nil {
+		return nil, errors.NewInternalServerError(err.Error())
+	}
+	defer rows.Close()
+
+	results := make([]User, 0)
+	for rows.Next() {
+		var user User
+		if err := rows.Scan(&user.Id, &user.FirstName, &user.LastName, &user.Email, &user.DateCreated, &user.Status); err != nil {
+			return nil, mysql_utils.ParseError(err)
+		}
+
+		results = append(results, user)
+	}
+
+	if len(results) == 0 {
+		return nil, errors.NewNotFoundError(fmt.Sprintf("no users matching status %s", status))
+	}
+
+	return results, nil
 }
