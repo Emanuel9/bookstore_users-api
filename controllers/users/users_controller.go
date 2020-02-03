@@ -1,6 +1,7 @@
 package users
 
 import (
+	"github.com/Emanuel9/bookstore_oauth-go/oauth"
 	"github.com/Emanuel9/bookstore_users-api/domain/users"
 	"github.com/Emanuel9/bookstore_users-api/services"
 	"github.com/Emanuel9/bookstore_users-api/utils/errors"
@@ -48,6 +49,12 @@ func Create(c *gin.Context) {
 }
 
 func Get(c *gin.Context) {
+	// Using the shared library
+	if err := oauth.AuthenticateRequest(c.Request); err != nil {
+		c.JSON(err.Status, err)
+		return
+	}
+
 	userId, idErr := getUserId(c.Param("user_id"))
 	if idErr != nil {
 		c.JSON(idErr.Status, idErr)
@@ -58,7 +65,13 @@ func Get(c *gin.Context) {
 		c.JSON(getErr.Status, getErr)
 		return
 	}
-	c.JSON(http.StatusOK, user.Marshall(c.GetHeader("X-Public") == "true"))
+
+	if oauth.GetCallerId(c.Request) == user.Id {
+		c.JSON(http.StatusOK, user.Marshall(false))
+		return
+	}
+
+	c.JSON(http.StatusOK, user.Marshall(oauth.IsPublic(c.Request)))
 }
 
 //func SearchUser(c *gin.Context) {
